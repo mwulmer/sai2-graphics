@@ -32,9 +32,11 @@ typedef vector<JointPtr> URDFJointVector;
 typedef map<string, LinkPtr > URDFLinkMap;
 typedef map<string, JointPtr > URDFJointMap;
 
+
 using namespace chai3d;
 
 namespace Parser {
+	
 // internal helper function to get a child object in the tree
 static cGenericObject* getGenericObjectChildRecursive(const std::string child_name, cGenericObject* parent) {
 	if (parent->getNumChildren() == 0) {
@@ -57,19 +59,23 @@ static cGenericObject* getGenericObjectChildRecursive(const std::string child_na
 // TODO: working dir default should be "", but this requires checking
 // to make sure that the directory path has a trailing backslash
 static void loadVisualtoGenericObject(cGenericObject* object, const my_shared_ptr<urdf::Visual>& visual_ptr, const std::string& working_dirname = "./") {
-	// parse material if specified
+	// parse material if specified working_dirname = "./"(previuos)
 	const auto material_ptr = visual_ptr->material;
+	// const auto texture_ptr=material_ptr->texture_filename;
+	string texture_file;
 	cColorf* color = NULL;
 	if (material_ptr) {
 		color = new cColorf(material_ptr->color.r,
-	    	material_ptr->color.g,
-	    	material_ptr->color.b,
-	    	material_ptr->color.a);
+		material_ptr->color.g,
+		material_ptr->color.b,
+		material_ptr->color.a);
+		texture_file=material_ptr->texture_filename;
 	}
 	// parse geometry if specified
 	const auto geom_type = visual_ptr->geometry->type;
 	auto tmp_mmesh = new cMultiMesh();
 	auto tmp_mesh = new cMesh();
+
 	if (geom_type == urdf::Geometry::MESH) {
 		// downcast geometry ptr to mesh type
 		const auto mesh_ptr = dynamic_cast<const urdf::Mesh*>(visual_ptr->geometry.get());
@@ -82,19 +88,34 @@ static void loadVisualtoGenericObject(cGenericObject* object, const my_shared_pt
 			}
 	    }
 	    // apply scale
-	    tmp_mmesh->scaleXYZ(
-			mesh_ptr->scale.x,
-			mesh_ptr->scale.y,
-			mesh_ptr->scale.z
-		);
-		if (color) {tmp_mmesh->m_material->setColor(*color);}
+	    tmp_mmesh->scaleXYZ(mesh_ptr->scale.x,mesh_ptr->scale.y,mesh_ptr->scale.z);
+		//if (color) {tmp_mmesh->m_material->setColor(*color);}
 	} else if (geom_type == urdf::Geometry::BOX) {
 		// downcast geometry ptr to box type
 		const auto box_ptr = dynamic_cast<const urdf::Box*>(visual_ptr->geometry.get());
 		assert(box_ptr);
 		// create chai box mesh
 		cCreateBox(tmp_mesh, box_ptr->dim.x, box_ptr->dim.y, box_ptr->dim.z);
-		if (color) {tmp_mesh->m_material->setColor(*color);}
+		// cCreatePlane(tmp_mesh, 0.3, 0.3);
+
+		if (color) { tmp_mesh->m_material->setColor(*color);
+		 }
+		
+		/*********************new modified by YCJ to add textures on objects******************************************/
+		if(texture_file.size()!=0)
+			{
+				tmp_mesh->m_texture = cTexture2d::create();
+				if(false == tmp_mesh->m_texture->loadFromFile(working_dirname+"/"+texture_file))
+				{
+					abort(); 
+				}
+				tmp_mesh->m_texture->setWrapModeS(GL_CLAMP);
+				tmp_mesh->setUseTexture(true,true);
+				tmp_mesh->setTexture(tmp_mesh->m_texture);
+				tmp_mesh->m_material->setWhite();	
+			}			
+		/************************************************************************************************************/
+
 		tmp_mmesh->addMesh(tmp_mesh);
 	} else if (geom_type == urdf::Geometry::SPHERE) {
 		// downcast geometry ptr to sphere type
@@ -103,6 +124,20 @@ static void loadVisualtoGenericObject(cGenericObject* object, const my_shared_pt
 		// create chai sphere mesh
 		cCreateSphere(tmp_mesh, sphere_ptr->radius);
 		if (color) {tmp_mesh->m_material->setColor(*color);}
+		/*********************new modified by YCJ to add textures on objects******************************************/
+		if(texture_file.size()!=0)
+			{
+				tmp_mesh->m_texture = cTexture2d::create();
+				if(false == tmp_mesh->m_texture->loadFromFile(working_dirname+"/"+texture_file))
+				{
+					abort(); 
+				}
+				tmp_mesh->m_texture->setWrapModeS(GL_CLAMP);
+				tmp_mesh->setUseTexture(true,true);
+				tmp_mesh->setTexture(tmp_mesh->m_texture);
+				tmp_mesh->m_material->setWhite();	
+			}			
+		/************************************************************************************************************/
 		tmp_mmesh->addMesh(tmp_mesh);
 	} else if (geom_type == urdf::Geometry::CYLINDER) {
 		// downcast geometry ptr to cylinder type
@@ -111,14 +146,20 @@ static void loadVisualtoGenericObject(cGenericObject* object, const my_shared_pt
 		// create chai sphere mesh
 		chai3d::cCreateCylinder(tmp_mesh, cylinder_ptr->length, cylinder_ptr->radius);
 		if (color) {tmp_mesh->m_material->setColor(*color);}
-		tmp_mmesh->addMesh(tmp_mesh);
-	} else if (geom_type == urdf::Geometry::CAPSULE) {
-		// downcast geometry ptr to cylinder type
-		const auto capsule_ptr = dynamic_cast<const urdf::Capsule*>(visual_ptr->geometry.get());
-		assert(capsule_ptr);
-		// create chai sphere mesh
-		chai3d::cCreateCapsule(tmp_mesh, capsule_ptr->radius, capsule_ptr->length);
-		if (color) {tmp_mesh->m_material->setColor(*color);}
+		/*********************new modified by YCJ to add textures on objects******************************************/
+		if(texture_file.size()!=0)
+			{
+				tmp_mesh->m_texture = cTexture2d::create();
+				if(false == tmp_mesh->m_texture->loadFromFile(working_dirname+"/"+texture_file))
+				{
+					abort(); 
+				}
+				tmp_mesh->m_texture->setWrapModeS(GL_CLAMP);
+				tmp_mesh->setUseTexture(true,true);
+				tmp_mesh->setTexture(tmp_mesh->m_texture);
+				tmp_mesh->m_material->setWhite();	
+			}			
+		/************************************************************************************************************/
 		tmp_mmesh->addMesh(tmp_mesh);
 	}
 	if (color) {delete color;}
@@ -217,6 +258,7 @@ void UrdfToSai2GraphicsWorld(const std::string& filename,
 		// set the near and far clipping planes of the camera
 		camera->setClippingPlanes(0.01, 10.0);
 
+		camera->setUseMultipassTransparency(true);
 		// TODO: parse from urdf
 		// // set vertical mirrored display mode
 		// camera->setMirrorVertical(false);
